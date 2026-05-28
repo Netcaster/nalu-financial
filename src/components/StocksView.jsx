@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import TVChart from './TVChart.jsx';
-import { fetchNews, fetchStockQuotes, fetchEconCalendar } from '../lib/api.js';
+import { fetchNews, fetchStockQuotes, fetchEconCalendar, fetchOptionsPCR } from '../lib/api.js';
 import { fmt, fmtCompact, fmtPct, pctClass, timeAgo } from '../lib/utils.js';
 import { STOCKS, STOCK_PRICES, STOCK_CHANGES, SECTORS, ECON_EVENTS } from '../lib/constants.js';
 
@@ -67,18 +67,28 @@ function IndicesBar({ idxQuotes }) {
   );
 }
 
-function StockWatchlist({ stocks, selected, onSelect, prices, changes }) {
+function StockWatchlist({ stocks, selected, onSelect, prices, changes, quotesMap }) {
   return (
     <div className="watchlist-list">
       {stocks.map(s => {
         const p   = prices[s.sym]  ?? STOCK_PRICES[s.sym]  ?? 0;
         const chg = changes[s.sym] ?? STOCK_CHANGES[s.sym] ?? 0;
+        const q   = quotesMap?.[s.sym];
+        const volRatio  = q?.regularMarketVolume && q?.averageDailyVolume3Month
+          ? q.regularMarketVolume / q.averageDailyVolume3Month : null;
+        const earnDays  = q?.earningsTimestamp
+          ? Math.ceil((q.earningsTimestamp * 1000 - Date.now()) / 86400000) : null;
+        const earnSoon  = earnDays !== null && earnDays >= 0 && earnDays <= 7;
         return (
           <div key={s.sym} className={`wl-item${s === selected ? ' active' : ''}`} onClick={() => onSelect(s)}>
             <div className="wl-left">
               <span className="stock-badge" style={{ width:30, height:24, fontSize:9, borderRadius:4 }}>{s.sym.slice(0,4)}</span>
               <div>
-                <div className="wl-sym">{s.sym}</div>
+                <div style={{ display:'flex', alignItems:'center', gap:4 }}>
+                  <span className="wl-sym">{s.sym}</span>
+                  {earnSoon && <span style={{ fontSize:7, background:'rgba(245,158,11,0.18)', color:'var(--yellow)', borderRadius:3, padding:'0 3px', fontWeight:700 }}>EPS {earnDays}d</span>}
+                  {volRatio !== null && volRatio > 1.5 && <span style={{ fontSize:7, color:'var(--teal)', fontWeight:700 }}>↑Vol</span>}
+                </div>
                 <div className="wl-name">{s.sector}</div>
               </div>
             </div>
@@ -189,6 +199,21 @@ function StockHeader({ stock, prices, changes, quotesMap }) {
           ))}
         </div>
       </div>
+      {/* Earnings warning */}
+      {(() => {
+        const earnDays = q?.earningsTimestamp
+          ? Math.ceil((q.earningsTimestamp * 1000 - Date.now()) / 86400000) : null;
+        if (earnDays === null || earnDays < 0 || earnDays > 14) return null;
+        const d = new Date(q.earningsTimestamp * 1000);
+        const label = d.toLocaleDateString('en-US', { month:'short', day:'numeric' });
+        return (
+          <div style={{ margin:'6px 0', background:'rgba(245,158,11,0.10)', border:'1px solid rgba(245,158,11,0.3)', borderRadius:6, padding:'6px 12px', display:'flex', alignItems:'center', gap:8, fontSize:11 }}>
+            <span style={{ color:'var(--yellow)', fontWeight:700 }}>⚡ Earnings in {earnDays} day{earnDays !== 1 ? 's' : ''}</span>
+            <span style={{ color:'var(--txt3)' }}>{label} · Binary event — reduce position size or close before report.</span>
+          </div>
+        );
+      })()}
+
       <div className="ta-bar">
         <div className="ta-item">
           <span className="ta-label">RSI (14)</span>
@@ -196,12 +221,47 @@ function StockHeader({ stock, prices, changes, quotesMap }) {
           <span className={`ta-signal ${rsi > 65 ? 'sell' : rsi < 35 ? 'buy' : 'neutral'}`}>{rsiSig}</span>
         </div>
         <div className="ta-sep" />
+        {/* 52w range position */}
+        {(() => {
+          const hi = q?.fiftyTwoWeekHigh || parseFloat(stock.high52);
+          const lo = q?.fiftyTwoWeekLow  || parseFloat(stock.low52);
+          const rangePct = hi && lo && hi !== lo ? ((price - lo) / (hi - lo) * 100) : null;
+          const pos = rangePct !== null ? (rangePct > 75 ? 'Near High' : rangePct < 25 ? 'Near Low' : 'Mid Range') : null;
+          const pc  = rangePct !== null ? (rangePct > 75 ? 'buy' : rangePct < 25 ? 'sell' : 'neutral') : 'neutral';
+          return pos ? (
+            <>
+              <div className="ta-item">
+                <span className="ta-label">52w Range</span>
+                <span className="ta-val">{rangePct.toFixed(0)}%</span>
+                <span className={`ta-signal ${pc}`}>{pos}</span>
+              </div>
+              <div className="ta-sep" />
+            </>
+          ) : null;
+        })()}
+        {/* Volume vs average */}
+        {(() => {
+          const volRatio = q?.regularMarketVolume && q?.averageDailyVolume3Month
+            ? q.regularMarketVolume / q.averageDailyVolume3Month : null;
+          const vs = volRatio !== null ? (volRatio > 1.5 ? 'High' : volRatio < 0.5 ? 'Low' : 'Normal') : null;
+          const vc = volRatio !== null ? (volRatio > 1.5 ? 'buy' : volRatio < 0.5 ? 'sell' : 'neutral') : 'neutral';
+          return vs ? (
+            <>
+              <div className="ta-item">
+                <span className="ta-label">Vol vs Avg</span>
+                <span className="ta-val">{volRatio.toFixed(2)}x</span>
+                <span className={`ta-signal ${vc}`}>{vs}</span>
+              </div>
+              <div className="ta-sep" />
+            </>
+          ) : null;
+        })()}
         <div className="ta-item"><span className="ta-label">Float</span><span className="ta-val">{stock.float}</span></div>
         <div className="ta-sep" />
         <div className="ta-item"><span className="ta-label">Short Int.</span><span className="ta-val">{stock.short}</span></div>
         <div className="ta-sep" />
         <div className="ta-item">
-          <span className="ta-label">24h Chg</span>
+          <span className="ta-label">Today</span>
           <span className={`ta-val ${pctClass(chg)}`}>{fmtPct(chg)}</span>
         </div>
       </div>
@@ -296,17 +356,49 @@ function EconCalendar({ events }) {
   );
 }
 
-function OptionsFlow() {
-  const pcr = (0.7 + Math.random() * 0.6).toFixed(2);
-  const iv  = (15  + Math.random() * 35).toFixed(1);
-  const unusual = Math.random() > 0.5 ? 'Bullish Calls' : 'Unusual Puts';
+function OptionsFlow({ pcr }) {
+  const eq  = pcr?.equity?.value ?? null;
+  const idx = pcr?.index?.value  ?? null;
+  const isLive = eq !== null;
+
+  const eqSentiment  = eq  !== null ? (eq < 0.7 ? 'Bullish' : eq > 1.0 ? 'Bearish' : 'Neutral') : '—';
+  const idxSentiment = idx !== null ? (idx < 0.8 ? 'Bullish' : idx > 1.2 ? 'Bearish' : 'Neutral') : '—';
+  const eqColor  = eq  !== null ? (eq  < 0.7 ? 'var(--green)' : eq  > 1.0 ? 'var(--red)' : 'var(--txt2)') : 'var(--txt3)';
+  const idxColor = idx !== null ? (idx < 0.8 ? 'var(--green)' : idx > 1.2 ? 'var(--red)' : 'var(--txt2)') : 'var(--txt3)';
+
+  // PCR trend from history
+  const hist = pcr?.history || [];
+  const trend = hist.length >= 3
+    ? hist[hist.length-1].value > hist[hist.length-3].value ? '↑ Rising (bearish)' : '↓ Falling (bullish)'
+    : null;
+
   return (
     <div className="panel-section">
-      <div className="panel-hdr"><span>Options Flow</span></div>
+      <div className="panel-hdr">
+        <span>Options Flow · PCR</span>
+        {isLive && <span style={{ fontSize:9, color:'var(--green)', marginLeft:6 }}>● LIVE</span>}
+      </div>
       <div className="options-info">
-        <div className="opt-row"><span>Put/Call Ratio</span><b className={parseFloat(pcr) < 1 ? 'green' : 'red'}>{pcr}</b></div>
-        <div className="opt-row"><span>Implied Volatility</span><b>{iv}%</b></div>
-        <div className="opt-row"><span>Unusual Activity</span><b className="green">{unusual}</b></div>
+        <div className="opt-row">
+          <span>Equity PCR (CBOE)</span>
+          <b style={{ color:eqColor }}>{eq !== null ? eq.toFixed(2) + ' — ' + eqSentiment : '—'}</b>
+        </div>
+        <div className="opt-row">
+          <span>Index PCR (CBOE)</span>
+          <b style={{ color:idxColor }}>{idx !== null ? idx.toFixed(2) + ' — ' + idxSentiment : '—'}</b>
+        </div>
+        {trend && <div className="opt-row"><span>20-day Trend</span><b style={{ color:'var(--txt2)' }}>{trend}</b></div>}
+        <div className="opt-row" style={{ fontSize:9, color:'var(--txt3)', marginTop:4 }}>
+          <span>PCR &lt; 0.7 → Calls dominant → bullish sentiment</span>
+        </div>
+        <div className="opt-row" style={{ fontSize:9, color:'var(--txt3)' }}>
+          <span>PCR &gt; 1.0 → Puts dominant → fear / hedging</span>
+        </div>
+        {!isLive && (
+          <div style={{ fontSize:9, color:'var(--txt3)', fontStyle:'italic', marginTop:4 }}>
+            CBOE data loading…
+          </div>
+        )}
       </div>
     </div>
   );
@@ -397,6 +489,7 @@ export default function StocksView({ theme, onToast }) {
   const [quotesMap,     setQuotesMap]     = useState({});
   const [sectorChanges, setSectorChanges] = useState({});
   const [econEvents,    setEconEvents]    = useState([]);
+  const [pcr,           setPcr]           = useState(null);
   const [liveStatus,    setLiveStatus]    = useState('loading');
 
   const loadQuotes = useCallback(async () => {
@@ -443,9 +536,8 @@ export default function StocksView({ theme, onToast }) {
   }, [loadQuotes]);
 
   useEffect(() => {
-    fetchEconCalendar()
-      .then(data => setEconEvents(data))
-      .catch(() => {}); // silent fallback to static ECON_EVENTS
+    fetchEconCalendar().then(setEconEvents).catch(() => {});
+    fetchOptionsPCR().then(setPcr).catch(() => {});
   }, []);
 
   useEffect(() => { loadNews(); }, []);
@@ -480,7 +572,7 @@ export default function StocksView({ theme, onToast }) {
         <aside className="left-panel">
           <div className="panel-section">
             <div className="panel-hdr"><span>Stock Watchlist</span></div>
-            <StockWatchlist stocks={STOCKS} selected={selected} onSelect={setSelected} prices={prices} changes={changes} />
+            <StockWatchlist stocks={STOCKS} selected={selected} onSelect={setSelected} prices={prices} changes={changes} quotesMap={quotesMap} />
           </div>
           <StockMovers stocks={STOCKS} onSelect={setSelected} prices={prices} changes={changes} />
         </aside>
@@ -508,7 +600,7 @@ export default function StocksView({ theme, onToast }) {
         <aside className="right-panel">
           <SectorPerf sectorChanges={sectorChanges} />
           <EconCalendar events={econEvents} />
-          <OptionsFlow />
+          <OptionsFlow pcr={pcr} />
         </aside>
       </div>
 

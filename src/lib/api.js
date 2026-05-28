@@ -68,6 +68,30 @@ export async function fetchNews(cat = '') {
   return posts;
 }
 
+export async function fetchFundingRates() {
+  const TARGETS = ['BTCUSDT','ETHUSDT','SOLUSDT','BNBUSDT','XRPUSDT','ADAUSDT','DOGEUSDT'];
+  const r = await fetch('https://fapi.binance.com/fapi/v1/premiumIndex', { headers: { Accept: 'application/json' } });
+  if (!r.ok) throw new Error('Binance futures HTTP ' + r.status);
+  const all = await r.json();
+  return all
+    .filter(x => TARGETS.includes(x.symbol))
+    .sort((a, b) => TARGETS.indexOf(a.symbol) - TARGETS.indexOf(b.symbol))
+    .map(x => ({
+      symbol: x.symbol.replace('USDT', ''),
+      fundingRate: parseFloat(x.lastFundingRate),
+      nextFundingTime: x.nextFundingTime,
+      markPrice: parseFloat(x.markPrice),
+    }));
+}
+
+export async function fetchOptionsPCR() {
+  const r = await fetch('/api/pcr');
+  if (!r.ok) throw new Error('PCR HTTP ' + r.status);
+  const data = await r.json();
+  if (data.error) throw new Error(data.error);
+  return data;
+}
+
 export function createBinanceWS(streamPath, onMessage) {
   const ws = new WebSocket(`${CFG.BINANCE_WS}/${streamPath}`);
   ws.onmessage = evt => {
@@ -79,6 +103,24 @@ export function createBinanceWS(streamPath, onMessage) {
 export async function searchCoinGecko(query) {
   const d = await apiFetch(`${CFG.COINGECKO}/search?query=${encodeURIComponent(query)}`);
   return d.coins?.slice(0, 6) || [];
+}
+
+export async function fetchEconCalendar() {
+  const r = await fetch('/api/calendar');
+  if (!r.ok) throw new Error(`Calendar HTTP ${r.status}`);
+  const data = await r.json();
+  if (data.error) throw new Error(data.error);
+  return data;
+}
+
+export async function fetchDefiLlamaTVL() {
+  const r = await fetch('https://api.llama.fi/protocols', { headers: { Accept: 'application/json' } });
+  if (!r.ok) throw new Error('DefiLlama HTTP ' + r.status);
+  const all = await r.json();
+  const targets = ['ocean-protocol', 'autonolas', 'singularitynet', 'worldcoin', 'fetch', 'render'];
+  return all.filter(p =>
+    targets.some(t => p.slug?.toLowerCase().includes(t) || p.name?.toLowerCase().includes(t))
+  ).slice(0, 12);
 }
 
 export async function fetchStockQuotes(symbols) {

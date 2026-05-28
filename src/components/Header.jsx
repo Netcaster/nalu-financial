@@ -92,6 +92,7 @@ export default function Header({ tab, onTabChange, theme, onThemeToggle, alertCo
     { id:'crypto',   label:'Crypto',    icon:'₿'  },
     { id:'stocks',   label:'Stocks',    icon:'📈' },
     { id:'defai',    label:'DeFAI',     icon:'🤖', badge:'AI' },
+    { id:'risk',     label:'Risk',      icon:'⚖️' },
     { id:'research', label:'Research',  icon:'🧠' },
   ];
 

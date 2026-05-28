@@ -13,6 +13,7 @@ export async function onRequest(context) {
     'regularMarketPreviousClose', 'shortName',
     'trailingPE', 'epsTrailingTwelveMonths', 'beta',
     'trailingAnnualDividendYield', 'averageDailyVolume3Month',
+    'earningsTimestamp', 'earningsTimestampStart', 'earningsTimestampEnd',
   ].join(',');
 
   const yahooUrl =

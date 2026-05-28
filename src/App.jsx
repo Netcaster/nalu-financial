@@ -4,6 +4,7 @@ import HubView from './components/HubView.jsx';
 import CryptoView from './components/CryptoView.jsx';
 import StocksView from './components/StocksView.jsx';
 import DeFAIView from './components/DeFAIView.jsx';
+import RiskView from './components/RiskView.jsx';
 import ResearchView from './components/ResearchView.jsx';
 
 const TABS = ['hub', 'crypto', 'stocks', 'defai', 'research'];
@@ -48,6 +49,7 @@ export default function App() {
       {tab === 'crypto'   && <CryptoView   theme={theme} onToast={showToast} onAlertCountChange={setAlertCount} />}
       {tab === 'stocks'   && <StocksView   theme={theme} onToast={showToast} />}
       {tab === 'defai'    && <DeFAIView    theme={theme} onToast={showToast} />}
+      {tab === 'risk'     && <RiskView     theme={theme} onToast={showToast} />}
       {tab === 'research' && <ResearchView theme={theme} onToast={showToast} />}
 
       {toast && (
