@@ -40,16 +40,16 @@ const modules = [
     text: 'MetaMask and WalletConnect will be added later in read-only mode. No passwords, seed phrases, or private keys are ever collected.',
   },
   {
-    title: 'Exchange Import Layer',
+    title: 'Coinbase / Exchange Intelligence Layer',
     icon: PlugZap,
     status: 'Placeholder ready',
-    text: 'Kraken, Coinbase, Binance, and other crypto accounts can be supported later through CSV imports or limited-permission APIs.',
+    text: 'Coinbase should be added through OAuth/API read-only access where available, with CSV import as the fallback. Exchange permissions should exclude withdrawals and trading until explicitly enabled later.',
   },
   {
-    title: 'Fidelity / Stock Intelligence',
+    title: 'E*TRADE / Stock Intelligence',
     icon: LineChart,
     status: 'CSV first',
-    text: 'Fidelity and stock accounts should start with CSV uploads or manual watchlists, then later support broker APIs when available and safe.',
+    text: 'E*TRADE should start with CSV imports and manual watchlists, then support brokerage API/OAuth read-only portfolio access where available. No broker password should ever be stored.',
   },
   {
     title: 'Persistent AI Research Memory',
@@ -105,8 +105,8 @@ const stack = [
   ['Memory',        'Qdrant vector DB for RAG research archive'],
   ['AI',            'Claude Haiku / Sonnet via NaluAsk widget'],
   ['Wallet',        'MetaMask + WalletConnect read-only first'],
-  ['Exchange Data', 'Kraken/Coinbase CSV first, APIs later'],
-  ['Market Data',   'CoinGecko, Binance WS, TradingView, DefiLlama'],
+  ['Exchange Data', 'Coinbase OAuth/API read-only first, CSV fallback'],
+  ['Market Data',   'CoinGecko, DefiLlama, SEC EDGAR, stock data APIs, brokerage CSV imports'],
   ['Alerts',        'Make.com → email, Telegram, Discord, SMS'],
 ];
 
@@ -121,7 +121,7 @@ const roadmap = [
     phase: 'Phase 2',
     title: 'Read-Only Data Connections',
     done: false,
-    details: 'MetaMask/WalletConnect public wallet reads, Kraken CSV import, Fidelity CSV import, and expanded market data feeds.',
+    details: 'MetaMask/WalletConnect public wallet reads, Coinbase read-only OAuth/API or CSV import, E*TRADE CSV import or read-only API where available, and expanded market data feeds.',
   },
   {
     phase: 'Phase 3',
@@ -360,7 +360,7 @@ export default function HubView({ theme }) {
           <div style={{ borderRadius: '12px', border: '1px solid rgba(251,191,36,0.2)', background: 'rgba(251,191,36,0.08)', padding: '14px', display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
             <AlertTriangle size={16} color="#fde68a" style={{ flexShrink: 0, marginTop: '2px' }} />
             <p style={{ fontSize: '12px', color: '#fde68a', margin: 0, lineHeight: 1.6 }}>
-              No autonomous trading, no private-key custody, no exchange withdrawal permission, and no AI wallet signing in the MVP.
+              No autonomous trading, no private-key custody, no exchange withdrawal permission, no broker password storage, and no AI wallet signing in the MVP.
             </p>
           </div>
         </HubCard>
@@ -428,7 +428,7 @@ export default function HubView({ theme }) {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: '20px' }}>
           {[
             { Icon: Search,   title: 'Immediate Build',       body: 'Personal AI intelligence terminal with macro tracking, infrastructure analysis, narrative monitoring, research memory, and institutional-style dashboards.' },
-            { Icon: Wallet,   title: 'Later Connections',     body: 'MetaMask, WalletConnect, Kraken, Fidelity, and other accounts added only when you are ready.'                                                             },
+            { Icon: Wallet,   title: 'Later Connections',     body: 'MetaMask/WalletConnect, Coinbase, E*TRADE, and other accounts added only through read-only OAuth/API or CSV imports when you are ready.'            },
             { Icon: FileText, title: 'Institutional Expansion', body: 'Expand into a subscription and enterprise-grade intelligence platform for AI infrastructure, crypto, macro, and institutional research clients.'        },
           ].map(({ Icon, title, body }) => (
             <div key={title} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
