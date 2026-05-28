@@ -117,12 +117,29 @@ function StockMovers({ stocks, onSelect, prices, changes }) {
   );
 }
 
-function StockHeader({ stock, prices, changes }) {
+function StockHeader({ stock, prices, changes, quotesMap }) {
   const price  = prices[stock.sym]  ?? STOCK_PRICES[stock.sym]  ?? 0;
   const chg    = changes[stock.sym] ?? STOCK_CHANGES[stock.sym] ?? 0;
   const chgAbs = price * (chg / 100);
   const rsi    = 45 + Math.random() * 20;
   const rsiSig = rsi > 65 ? 'Overbought' : rsi < 35 ? 'Oversold' : 'Neutral';
+
+  // live quote fields with static fallbacks
+  const q = quotesMap?.[stock.sym];
+  const high52 = q?.fiftyTwoWeekHigh   ? '$' + fmt(q.fiftyTwoWeekHigh, 2)   : '$' + stock.high52;
+  const low52  = q?.fiftyTwoWeekLow    ? '$' + fmt(q.fiftyTwoWeekLow,  2)   : '$' + stock.low52;
+  const mcap   = q?.marketCap          ? fmtCompact(q.marketCap)            : stock.mcap;
+  const pe     = q?.trailingPE         ? fmt(q.trailingPE, 1)               : (stock.pe || '—');
+  const eps    = q?.epsTrailingTwelveMonths != null ? '$' + fmt(q.epsTrailingTwelveMonths, 2) : '$' + stock.eps;
+  const beta   = q?.beta               ? fmt(q.beta, 2)                     : stock.beta;
+  const divYld = q?.trailingAnnualDividendYield != null
+    ? (q.trailingAnnualDividendYield * 100).toFixed(2) + '%'
+    : stock.div;
+  const vol    = q?.averageDailyVolume3Month
+    ? fmtCompact(q.averageDailyVolume3Month)
+    : stock.avgvol;
+  const isLive = !!q;
+
   return (
     <>
       <div className="coin-hdr">
@@ -130,7 +147,10 @@ function StockHeader({ stock, prices, changes }) {
           <span className="stock-badge" style={{ fontSize:14, padding:'6px 10px' }}>{stock.sym}</span>
           <div>
             <div className="coin-name-txt">{stock.name}</div>
-            <div className="coin-pair">{stock.tv.split(':')[0]} · {stock.sector}</div>
+            <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+              <span className="coin-pair">{stock.tv.split(':')[0]} · {stock.sector}</span>
+              {isLive && <span style={{ fontSize:9, background:'rgba(0,211,149,0.12)', color:'var(--green)', borderRadius:6, padding:'1px 6px', fontWeight:600 }}>● LIVE</span>}
+            </div>
           </div>
           <div className="price-block">
             <div className="big-price">${fmt(price, 2)}</div>
@@ -141,14 +161,14 @@ function StockHeader({ stock, prices, changes }) {
         </div>
         <div className="coin-metrics">
           {[
-            ['52w High', '$' + stock.high52],
-            ['52w Low',  '$' + stock.low52],
-            ['Avg Vol',  stock.avgvol],
-            ['Mkt Cap',  stock.mcap],
-            ['P/E',      stock.pe || '—'],
-            ['EPS',      '$' + stock.eps],
-            ['Beta',     stock.beta],
-            ['Dividend', stock.div],
+            ['52w High', high52],
+            ['52w Low',  low52],
+            ['Avg Vol',  vol],
+            ['Mkt Cap',  mcap],
+            ['P/E',      pe],
+            ['EPS',      eps],
+            ['Beta',     beta],
+            ['Dividend', divYld],
           ].map(([k, v]) => (
             <div key={k} className="cm"><span>{k}</span><b>{v}</b></div>
           ))}
@@ -309,7 +329,8 @@ export default function StocksView({ theme, onToast }) {
   const [prices,      setPrices]      = useState({});
   const [changes,     setChanges]     = useState({});
   const [idxQuotes,   setIdxQuotes]   = useState({});
-  const [liveStatus,  setLiveStatus]  = useState('loading'); // 'loading' | 'live' | 'cached'
+  const [quotesMap,   setQuotesMap]   = useState({});
+  const [liveStatus,  setLiveStatus]  = useState('loading');
 
   const loadQuotes = useCallback(async () => {
     try {
@@ -317,12 +338,14 @@ export default function StocksView({ theme, onToast }) {
       const newPrices  = {};
       const newChanges = {};
       const newIdx     = {};
+      const newQMap    = {};
 
       quotes.forEach(q => {
         const sym = q.symbol;
         if (STOCK_SYMS.includes(sym)) {
           newPrices[sym]  = q.regularMarketPrice;
           newChanges[sym] = q.regularMarketChangePercent;
+          newQMap[sym]    = q;
         }
         if (INDEX_SYMS.includes(sym)) {
           newIdx[sym] = q;
@@ -332,6 +355,7 @@ export default function StocksView({ theme, onToast }) {
       setPrices(newPrices);
       setChanges(newChanges);
       setIdxQuotes(newIdx);
+      setQuotesMap(newQMap);
       setLiveStatus('live');
     } catch (err) {
       console.warn('Live stock quotes unavailable:', err.message);
@@ -384,7 +408,7 @@ export default function StocksView({ theme, onToast }) {
         </aside>
 
         <main className="center-panel">
-          <StockHeader stock={selected} prices={prices} changes={changes} />
+          <StockHeader stock={selected} prices={prices} changes={changes} quotesMap={quotesMap} />
           <div className="chart-ctrl-bar">
             <div className="tf-group">
               {Object.entries(TF_LABELS).map(([tf, label]) => (

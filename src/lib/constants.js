@@ -61,18 +61,21 @@ export const STOCKS = [
   { sym:'SPY',   name:'S&P 500 ETF',         tv:'AMEX:SPY',     sector:'ETF',           pe:22.4, eps:24.00,beta:1.00, div:'1.3%',  avgvol:'75M',  float:'N/A',   short:'0.2%', mcap:'535B',  high52:'614.37', low52:'480.72' },
   { sym:'QQQ',   name:'Nasdaq-100 ETF',      tv:'NASDAQ:QQQ',   sector:'ETF',           pe:30.1, eps:16.20,beta:1.05, div:'0.6%',  avgvol:'50M',  float:'N/A',   short:'0.3%', mcap:'225B',  high52:'540.81', low52:'391.80' },
   { sym:'GLD',   name:'Gold ETF (SPDR)',      tv:'AMEX:GLD',     sector:'Commodities',   pe:0,    eps:0,    beta:0.03, div:'0%',    avgvol:'10M',  float:'N/A',   short:'0.1%', mcap:'75B',   high52:'303.11', low52:'187.77' },
+  { sym:'AMD',   name:'Advanced Micro Devices', tv:'NASDAQ:AMD', sector:'Semiconductors',pe:118,  eps:0.53, beta:1.70, div:'0%',    avgvol:'45M',  float:'1.6B',  short:'1.8%', mcap:'195B',  high52:'227.30', low52:'117.00' },
+  { sym:'COIN',  name:'Coinbase Global',      tv:'NASDAQ:COIN',  sector:'Crypto/Finance',pe:28.5, eps:7.82, beta:3.50, div:'0%',    avgvol:'12M',  float:'0.24B', short:'5.2%', mcap:'52B',   high52:'349.75', low52:'129.53' },
+  { sym:'MSTR',  name:'MicroStrategy',        tv:'NASDAQ:MSTR',  sector:'Bitcoin/Tech',  pe:0,    eps:0,    beta:2.80, div:'0%',    avgvol:'18M',  float:'0.11B', short:'10.1%',mcap:'42B',   high52:'543.00', low52:'107.26' },
 ];
 
 export const STOCK_PRICES = {
   AAPL:185.92, MSFT:415.32, NVDA:875.43, TSLA:248.50, AMZN:195.18,
   GOOGL:172.45, META:512.60, JPM:225.85, 'BRK.B':422.10, SPY:560.22,
-  QQQ:480.55, GLD:222.85,
+  QQQ:480.55, GLD:222.85, AMD:158.40, COIN:218.75, MSTR:380.20,
 };
 
 export const STOCK_CHANGES = {
   AAPL:1.24, MSFT:-0.32, NVDA:2.87, TSLA:-1.55, AMZN:0.78,
   GOOGL:0.45, META:1.22, JPM:-0.18, 'BRK.B':0.56, SPY:0.34,
-  QQQ:0.62, GLD:-0.11,
+  QQQ:0.62, GLD:-0.11, AMD:1.85, COIN:3.42, MSTR:4.15,
 };
 
 export const SECTORS = [

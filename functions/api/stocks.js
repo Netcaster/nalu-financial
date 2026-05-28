@@ -11,6 +11,8 @@ export async function onRequest(context) {
     'regularMarketDayHigh', 'regularMarketDayLow', 'regularMarketVolume',
     'marketCap', 'fiftyTwoWeekHigh', 'fiftyTwoWeekLow',
     'regularMarketPreviousClose', 'shortName',
+    'trailingPE', 'epsTrailingTwelveMonths', 'beta',
+    'trailingAnnualDividendYield', 'averageDailyVolume3Month',
   ].join(',');
 
   const yahooUrl =
