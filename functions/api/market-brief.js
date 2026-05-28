@@ -1,70 +1,47 @@
 export async function onRequest(context) {
+  if (context.request.method === 'OPTIONS') {
+    return new Response(null, { headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST', 'Access-Control-Allow-Headers': 'Content-Type' } });
+  }
+
   const key = context.env.ANTHROPIC_API_KEY;
   if (!key) return json({ error: 'ANTHROPIC_API_KEY not set in Cloudflare Pages environment variables.' }, 500);
 
-  const [cryptoRes, stockRes] = await Promise.allSettled([
-    fetch(
-      'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,solana,bittensor,fetch-ai,render-token&vs_currencies=usd&include_24hr_change=true',
-      { headers: { Accept: 'application/json' } }
-    ),
-    fetch(
-      'https://query1.finance.yahoo.com/v7/finance/quote?symbols=SPY,QQQ,NVDA,AAPL,MSFT,COIN,MSTR',
-      {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-          Accept: 'application/json',
-          Referer: 'https://finance.yahoo.com/',
-          Origin: 'https://finance.yahoo.com',
-        },
-      }
-    ),
-  ]);
+  const body = await context.request.json().catch(() => ({}));
+  const { crypto = {}, stocks = {} } = body;
 
-  const n = (v) => v != null ? v.toLocaleString('en-US', { maximumFractionDigits: 2 }) : '?';
-  const p = (v) => v != null ? `${v >= 0 ? '+' : ''}${v.toFixed(1)}%` : '?';
+  const fmtPrice = (v) => v != null ? Number(v).toLocaleString('en-US', { maximumFractionDigits: 2 }) : '?';
+  const fmtChg   = (v) => v != null ? `${Number(v) >= 0 ? '+' : ''}${Number(v).toFixed(2)}%` : '?';
 
-  let cryptoCtx = '';
-  if (cryptoRes.status === 'fulfilled' && cryptoRes.value.ok) {
-    const d = await cryptoRes.value.json();
-    cryptoCtx = [
-      ['bitcoin',      'BTC'],
-      ['ethereum',     'ETH'],
-      ['solana',       'SOL'],
-      ['bittensor',    'TAO'],
-      ['fetch-ai',     'FET'],
-      ['render-token', 'RENDER'],
-    ]
-      .map(([id, sym]) => {
-        const c = d[id];
-        return c ? `${sym}: $${n(c.usd)} (${p(c.usd_24h_change)} 24h)` : null;
-      })
-      .filter(Boolean)
-      .join('\n');
-  }
+  const cryptoLines = [
+    crypto.bitcoin  ? `BTC:    $${fmtPrice(crypto.bitcoin.usd)}  (${fmtChg(crypto.bitcoin.usd_24h_change)} 24h)` : null,
+    crypto.ethereum ? `ETH:    $${fmtPrice(crypto.ethereum.usd)}  (${fmtChg(crypto.ethereum.usd_24h_change)} 24h)` : null,
+    crypto.solana   ? `SOL:    $${fmtPrice(crypto.solana.usd)}  (${fmtChg(crypto.solana.usd_24h_change)} 24h)` : null,
+  ].filter(Boolean).join('\n');
 
-  let stockCtx = '';
-  if (stockRes.status === 'fulfilled' && stockRes.value.ok) {
-    const d = await stockRes.value.json();
-    stockCtx = (d?.quoteResponse?.result || [])
-      .map(q => `${q.symbol}: $${n(q.regularMarketPrice)} (${p(q.regularMarketChangePercent)})`)
-      .join('\n');
-  }
+  const stockLines = Object.entries(stocks)
+    .filter(([, q]) => q?.price != null)
+    .map(([sym, q]) => `${sym.padEnd(5)} $${fmtPrice(q.price)}  (${fmtChg(q.changePercent)})`)
+    .join('\n');
 
   const today = new Date().toLocaleDateString('en-US', {
     weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
   });
 
-  const prompt = `You are an institutional AI market analyst for Nalu Financial Intelligence. Today is ${today}.
+  const hasData = cryptoLines.length > 0 || stockLines.length > 0;
 
-LIVE MARKET DATA:
+  const prompt = hasData
+    ? `You are an institutional AI market analyst for Nalu Financial Intelligence. Today is ${today}.
 
-Crypto:
-${cryptoCtx || 'Unavailable'}
+The following prices were captured live from market feeds moments ago. Use this exact data to write your analysis — do not say data is unavailable.
 
-Stocks / ETFs:
-${stockCtx || 'Unavailable'}
+CRYPTO (live):
+${cryptoLines}
 
-Write a concise institutional market intelligence brief (4–6 sentences). Cover: overall market tone and risk-on/risk-off sentiment, the most significant move and what it signals for positioning, the AI infrastructure narrative across NVDA/tech stocks and AI tokens, and one key risk or opportunity to watch. Be direct and professional — flowing prose only, no bullet points, no headers.`;
+STOCKS / ETFs (live):
+${stockLines}
+
+Write a 4–6 sentence institutional market intelligence brief. Specifically reference the actual prices and percentage moves above. Cover: overall risk-on/risk-off tone, the most significant move, the AI infrastructure narrative (NVDA + AI tokens), and one key risk or opportunity. Plain prose only — no markdown, no headers, no bullet points.`
+    : `You are an institutional AI market analyst for Nalu Financial Intelligence. Today is ${today}. Market data was not available for this brief. Write 2 sentences acknowledging this and advising the user to refresh and try again.`;
 
   const r = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -82,13 +59,22 @@ Write a concise institutional market intelligence brief (4–6 sentences). Cover
 
   if (!r.ok) {
     const txt = await r.text().catch(() => '');
-    return json({ error: `Anthropic API ${r.status}: ${txt.slice(0, 120)}` }, 500);
+    return json({ error: `Anthropic API ${r.status}: ${txt.slice(0, 200)}` }, 500);
   }
 
   const data = await r.json();
-  const brief = data?.content?.[0]?.text?.trim() ?? '';
-  return json({ brief, generated: new Date().toISOString() }, 200, {
-    'Cache-Control': 'public, max-age=1800, s-maxage=1800',
+  const raw = data?.content?.[0]?.text?.trim() ?? '';
+  // Strip markdown formatting that Haiku inserts despite instructions
+  const brief = raw
+    .replace(/^#{1,6}\s*/gm, '')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/\*([^*]+)\*/g, '$1')
+    .replace(/^[-]{3,}$/gm, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+  // no CDN cache — each brief is unique per-request
+  return json({ brief, generated: new Date().toISOString(), hasData }, 200, {
+    'Cache-Control': 'no-store',
   });
 }
 

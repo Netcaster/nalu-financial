@@ -516,12 +516,17 @@ export default function HubView({ theme, onTabChange }) {
   const generateBrief = useCallback(async () => {
     setBL(true);
     try {
-      const r = await fetch('/api/market-brief');
+      const r = await fetch('/api/market-brief', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ crypto: prices.crypto, stocks: prices.stocks }),
+      });
       const d = await r.json();
-      if (!d.error) setBrief(d);
-    } catch {}
+      if (d.error) console.error('Brief error:', d.error);
+      else setBrief(d);
+    } catch (e) { console.error('Brief fetch failed:', e); }
     finally { setBL(false); }
-  }, []);
+  }, [prices]);
 
   const connectWallet = useCallback(async () => {
     if (!window.ethereum) { alert('MetaMask not detected. Please install the browser extension.'); return; }
