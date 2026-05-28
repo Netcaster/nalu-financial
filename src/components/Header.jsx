@@ -3,10 +3,26 @@ import { searchCoinGecko } from '../lib/api.js';
 import { STOCKS } from '../lib/constants.js';
 
 const LogoIcon = () => (
-  <svg width="26" height="26" viewBox="0 0 32 32" fill="none">
-    <polygon points="16,2 30,10 30,22 16,30 2,22 2,10" fill="none" stroke="#14bcbd" strokeWidth="2"/>
-    <polygon points="16,8 24,13 24,21 16,26 8,21 8,13" fill="#14bcbd" opacity="0.25"/>
-    <circle cx="16" cy="16" r="3.5" fill="#14bcbd"/>
+  <svg width="30" height="30" viewBox="0 0 32 32" fill="none">
+    {/* outer ring */}
+    <circle cx="16" cy="16" r="14.5" stroke="#14bcbd" strokeWidth="1" opacity="0.35"/>
+    {/* inner ring */}
+    <circle cx="16" cy="16" r="9" stroke="#14bcbd" strokeWidth="0.6" opacity="0.18"/>
+    {/* connecting lines */}
+    <line x1="16" y1="4"  x2="5"  y2="13" stroke="#14bcbd" strokeWidth="0.9" opacity="0.45"/>
+    <line x1="16" y1="4"  x2="27" y2="13" stroke="#14bcbd" strokeWidth="0.9" opacity="0.45"/>
+    <line x1="5"  y1="13" x2="10" y2="26" stroke="#14bcbd" strokeWidth="0.9" opacity="0.45"/>
+    <line x1="27" y1="13" x2="22" y2="26" stroke="#14bcbd" strokeWidth="0.9" opacity="0.45"/>
+    <line x1="10" y1="26" x2="22" y2="26" stroke="#14bcbd" strokeWidth="0.9" opacity="0.45"/>
+    <line x1="5"  y1="13" x2="27" y2="13" stroke="#14bcbd" strokeWidth="0.9" opacity="0.3"/>
+    <line x1="16" y1="4"  x2="10" y2="26" stroke="#14bcbd" strokeWidth="0.9" opacity="0.2"/>
+    <line x1="16" y1="4"  x2="22" y2="26" stroke="#14bcbd" strokeWidth="0.9" opacity="0.2"/>
+    {/* nodes */}
+    <circle cx="16" cy="4"  r="2.4" fill="#14bcbd"/>
+    <circle cx="5"  cy="13" r="2.4" fill="#14bcbd"/>
+    <circle cx="27" cy="13" r="2.4" fill="#14bcbd"/>
+    <circle cx="10" cy="26" r="2.4" fill="#14bcbd"/>
+    <circle cx="22" cy="26" r="2.4" fill="#14bcbd"/>
   </svg>
 );
 
