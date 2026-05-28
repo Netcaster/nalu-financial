@@ -72,6 +72,7 @@ export default function Header({ tab, onTabChange, theme, onThemeToggle, alertCo
   }
 
   const TABS = [
+    { id:'hub',      label:'Hub',       icon:'✦',  badge:'NEW' },
     { id:'crypto',   label:'Crypto',    icon:'₿'  },
     { id:'stocks',   label:'Stocks',    icon:'📈' },
     { id:'defai',    label:'DeFAI',     icon:'🤖', badge:'AI' },

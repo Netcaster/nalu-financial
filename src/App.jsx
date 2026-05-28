@@ -1,14 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import Header from './components/Header.jsx';
+import HubView from './components/HubView.jsx';
 import CryptoView from './components/CryptoView.jsx';
 import StocksView from './components/StocksView.jsx';
 import DeFAIView from './components/DeFAIView.jsx';
 import ResearchView from './components/ResearchView.jsx';
 
-const TABS = ['crypto', 'stocks', 'defai', 'research'];
+const TABS = ['hub', 'crypto', 'stocks', 'defai', 'research'];
 
 export default function App() {
-  const [tab, setTab] = useState('crypto');
+  const [tab, setTab] = useState('hub');
   const [theme, setTheme] = useState(() => localStorage.getItem('nalu_theme') || 'dark');
   const [toast, setToast] = useState(null);
   const [alertCount, setAlertCount] = useState(0);
@@ -43,6 +44,7 @@ export default function App() {
         alertCount={alertCount}
       />
 
+      {tab === 'hub'      && <HubView      theme={theme} />}
       {tab === 'crypto'   && <CryptoView   theme={theme} onToast={showToast} onAlertCountChange={setAlertCount} />}
       {tab === 'stocks'   && <StocksView   theme={theme} onToast={showToast} />}
       {tab === 'defai'    && <DeFAIView    theme={theme} onToast={showToast} />}
