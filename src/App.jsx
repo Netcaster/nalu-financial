@@ -45,7 +45,7 @@ export default function App() {
         alertCount={alertCount}
       />
 
-      {tab === 'hub'      && <HubView      theme={theme} />}
+      {tab === 'hub'      && <HubView      theme={theme} onTabChange={setTab} />}
       {tab === 'crypto'   && <CryptoView   theme={theme} onToast={showToast} onAlertCountChange={setAlertCount} />}
       {tab === 'stocks'   && <StocksView   theme={theme} onToast={showToast} />}
       {tab === 'defai'    && <DeFAIView    theme={theme} onToast={showToast} />}
