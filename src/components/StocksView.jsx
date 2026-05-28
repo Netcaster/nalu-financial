@@ -1,13 +1,28 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import TVChart from './TVChart.jsx';
-import { fetchNews, fetchStockQuotes } from '../lib/api.js';
+import { fetchNews, fetchStockQuotes, fetchEconCalendar } from '../lib/api.js';
 import { fmt, fmtCompact, fmtPct, pctClass, timeAgo } from '../lib/utils.js';
 import { STOCKS, STOCK_PRICES, STOCK_CHANGES, SECTORS, ECON_EVENTS } from '../lib/constants.js';
 
 /* ── symbols to request from Yahoo Finance ──────────────────────── */
 const STOCK_SYMS  = STOCKS.map(s => s.sym);
 const INDEX_SYMS  = ['^GSPC', '^NDX', '^DJI', '^VIX', 'GC=F', 'CL=F', 'DX-Y.NYB', '^TNX'];
-const ALL_SYMS    = [...STOCK_SYMS, ...INDEX_SYMS];
+
+const SECTOR_ETFS = [
+  { name:'Technology',     sym:'XLK'  },
+  { name:'Financials',     sym:'XLF'  },
+  { name:'Healthcare',     sym:'XLV'  },
+  { name:'Consumer Disc.', sym:'XLY'  },
+  { name:'Energy',         sym:'XLE'  },
+  { name:'Industrials',    sym:'XLI'  },
+  { name:'Utilities',      sym:'XLU'  },
+  { name:'Real Estate',    sym:'XLRE' },
+  { name:'Materials',      sym:'XLB'  },
+  { name:'Comm. Services', sym:'XLC'  },
+];
+const SECTOR_SYMS = SECTOR_ETFS.map(s => s.sym);
+
+const ALL_SYMS = [...STOCK_SYMS, ...INDEX_SYMS, ...SECTOR_SYMS];
 
 const IDX_META = [
   { sym:'^GSPC',   name:'S&P 500',    fmt: v => v.toLocaleString('en-US', { maximumFractionDigits:0 }) },
@@ -194,13 +209,22 @@ function StockHeader({ stock, prices, changes, quotesMap }) {
   );
 }
 
-function SectorPerf() {
-  const max = Math.max(...SECTORS.map(s => Math.abs(s.chg)));
+function SectorPerf({ sectorChanges }) {
+  const rows = SECTOR_ETFS.map((s, i) => ({
+    name: s.name,
+    chg:  sectorChanges[s.sym] ?? SECTORS[i]?.chg ?? 0,
+    live: s.sym in sectorChanges,
+  }));
+  const max = Math.max(...rows.map(s => Math.abs(s.chg)), 0.01);
   return (
     <div className="panel-section">
-      <div className="panel-hdr"><span>Sector Performance</span></div>
+      <div className="panel-hdr">
+        <span>Sector Performance</span>
+        {Object.keys(sectorChanges).length > 0 &&
+          <span style={{ fontSize:9, color:'var(--green)', marginLeft:6 }}>● LIVE</span>}
+      </div>
       <div className="sector-list">
-        {SECTORS.map(s => (
+        {rows.map(s => (
           <div key={s.name} className="sector-row">
             <span className="sector-name">{s.name}</span>
             <div className="sector-bar-wrap">
@@ -214,18 +238,59 @@ function SectorPerf() {
   );
 }
 
-function EconCalendar() {
+function EconCalendar({ events }) {
+  if (!events || events.length === 0) {
+    return (
+      <div className="panel-section">
+        <div className="panel-hdr"><span>Economic Calendar</span></div>
+        <div className="econ-list">
+          {ECON_EVENTS.map(e => (
+            <div key={e.event} className="econ-item">
+              <span className="econ-time">{e.time}</span>
+              <span className="econ-event">{e.event}</span>
+              <span className={`econ-impact ${e.impact}`}>{e.impact.toUpperCase()}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  const now = new Date();
+  // Show today + next 2 days, max 8 events
+  const upcoming = events
+    .filter(e => new Date(e.date) >= new Date(now.toDateString()))
+    .slice(0, 8);
+
   return (
     <div className="panel-section">
-      <div className="panel-hdr"><span>Economic Calendar</span></div>
+      <div className="panel-hdr">
+        <span>Economic Calendar</span>
+        <span style={{ fontSize:9, color:'var(--green)', marginLeft:6 }}>● LIVE</span>
+      </div>
       <div className="econ-list">
-        {ECON_EVENTS.map(e => (
-          <div key={e.event} className="econ-item">
-            <span className="econ-time">{e.time}</span>
-            <span className="econ-event">{e.event}</span>
-            <span className={`econ-impact ${e.impact}`}>{e.impact.toUpperCase()}</span>
-          </div>
-        ))}
+        {upcoming.map((e, i) => {
+          const d    = new Date(e.date);
+          const time = d.toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit', hour12:true, timeZone:'America/New_York' });
+          const day  = d.toLocaleDateString('en-US', { weekday:'short', timeZone:'America/New_York' });
+          const imp  = e.impact?.toLowerCase() === 'high' ? 'high' : 'med';
+          return (
+            <div key={i} className="econ-item" style={{ flexDirection:'column', alignItems:'flex-start', gap:2, paddingBottom:6 }}>
+              <div style={{ display:'flex', alignItems:'center', gap:6, width:'100%' }}>
+                <span className="econ-time">{day} {time}</span>
+                <span className={`econ-impact ${imp}`}>{e.impact?.toUpperCase()}</span>
+              </div>
+              <span className="econ-event" style={{ fontSize:11, whiteSpace:'normal' }}>{e.title}</span>
+              {(e.forecast || e.previous) && (
+                <div style={{ display:'flex', gap:10, fontSize:10, color:'var(--txt3)' }}>
+                  {e.forecast && <span>Forecast: <b style={{ color:'var(--txt2)' }}>{e.forecast}</b></span>}
+                  {e.previous && <span>Prior: <b style={{ color:'var(--txt2)' }}>{e.previous}</b></span>}
+                  {e.actual   && <span>Actual: <b style={{ color:'var(--teal)' }}>{e.actual}</b></span>}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -326,19 +391,22 @@ export default function StocksView({ theme, onToast }) {
   const [tvInterval,  setTvInterval]  = useState('D');
   const [news,        setNews]        = useState([]);
   const [newsLoading, setNewsLoading] = useState(false);
-  const [prices,      setPrices]      = useState({});
-  const [changes,     setChanges]     = useState({});
-  const [idxQuotes,   setIdxQuotes]   = useState({});
-  const [quotesMap,   setQuotesMap]   = useState({});
-  const [liveStatus,  setLiveStatus]  = useState('loading');
+  const [prices,        setPrices]        = useState({});
+  const [changes,       setChanges]       = useState({});
+  const [idxQuotes,     setIdxQuotes]     = useState({});
+  const [quotesMap,     setQuotesMap]     = useState({});
+  const [sectorChanges, setSectorChanges] = useState({});
+  const [econEvents,    setEconEvents]    = useState([]);
+  const [liveStatus,    setLiveStatus]    = useState('loading');
 
   const loadQuotes = useCallback(async () => {
     try {
       const quotes = await fetchStockQuotes(ALL_SYMS);
-      const newPrices  = {};
-      const newChanges = {};
-      const newIdx     = {};
-      const newQMap    = {};
+      const newPrices   = {};
+      const newChanges  = {};
+      const newIdx      = {};
+      const newQMap     = {};
+      const newSectors  = {};
 
       quotes.forEach(q => {
         const sym = q.symbol;
@@ -350,12 +418,16 @@ export default function StocksView({ theme, onToast }) {
         if (INDEX_SYMS.includes(sym)) {
           newIdx[sym] = q;
         }
+        if (SECTOR_SYMS.includes(sym)) {
+          newSectors[sym] = q.regularMarketChangePercent ?? 0;
+        }
       });
 
       setPrices(newPrices);
       setChanges(newChanges);
       setIdxQuotes(newIdx);
       setQuotesMap(newQMap);
+      setSectorChanges(newSectors);
       setLiveStatus('live');
     } catch (err) {
       console.warn('Live stock quotes unavailable:', err.message);
@@ -369,6 +441,12 @@ export default function StocksView({ theme, onToast }) {
     const id = setInterval(loadQuotes, 60000);
     return () => clearInterval(id);
   }, [loadQuotes]);
+
+  useEffect(() => {
+    fetchEconCalendar()
+      .then(data => setEconEvents(data))
+      .catch(() => {}); // silent fallback to static ECON_EVENTS
+  }, []);
 
   useEffect(() => { loadNews(); }, []);
 
@@ -428,8 +506,8 @@ export default function StocksView({ theme, onToast }) {
         </main>
 
         <aside className="right-panel">
-          <SectorPerf />
-          <EconCalendar />
+          <SectorPerf sectorChanges={sectorChanges} />
+          <EconCalendar events={econEvents} />
           <OptionsFlow />
         </aside>
       </div>

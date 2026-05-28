@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import TVChart from './TVChart.jsx';
-import { fetchMarketData } from '../lib/api.js';
+import { fetchMarketData, fetchDefiLlamaTVL } from '../lib/api.js';
 import { fmt, fmtCompact, fmtPct, pctClass, decimalPlaces } from '../lib/utils.js';
 import { DEFAI_TOKENS, CG_TO_TV, APPROVAL_QUEUE } from '../lib/constants.js';
 
@@ -35,16 +35,14 @@ const RISK_ALERTS = [
 
 export default function DeFAIView({ theme, onToast }) {
   const [marketData,   setMarketData]   = useState([]);
+  const [defiTVL,      setDefiTVL]      = useState([]);
   const [selected,     setSelected]     = useState(DEFAI_TOKENS[0]);
   const [tvInterval,   setTvInterval]   = useState('D');
   const [loading,      setLoading]      = useState(true);
 
   useEffect(() => {
     fetchMarketData(DEFAI_IDS)
-      .then(data => {
-        setMarketData(data);
-        setLoading(false);
-      })
+      .then(data => { setMarketData(data); setLoading(false); })
       .catch(() => setLoading(false));
 
     const t = setInterval(() => {
@@ -53,7 +51,44 @@ export default function DeFAIView({ theme, onToast }) {
     return () => clearInterval(t);
   }, []);
 
+  useEffect(() => {
+    fetchDefiLlamaTVL()
+      .then(data => setDefiTVL(data))
+      .catch(() => {});
+  }, []);
+
   const marketMap = Object.fromEntries(marketData.map(c => [c.id, c]));
+
+  // Build live scanner rows: 7d price change from CoinGecko + TVL from DefiLlama
+  const tvlMap = Object.fromEntries(
+    defiTVL.map(p => [p.slug?.toLowerCase() || p.name?.toLowerCase(), p])
+  );
+  const liveScanner = DEFAI_TOKENS.map(token => {
+    const c   = marketMap[token.id];
+    const chg = c?.price_change_percentage_7d_in_currency ?? null;
+    // match DefiLlama by various slug/name patterns
+    const llamaKey = Object.keys(tvlMap).find(k =>
+      k.includes(token.id.replace('-org','').replace('-2','').replace('-network','').replace('-protocol','')) ||
+      k.includes(token.sym.toLowerCase()) ||
+      k.includes(token.name.toLowerCase().split(' ')[0])
+    );
+    const llama = llamaKey ? tvlMap[llamaKey] : null;
+    const tvl   = llama?.tvl ?? null;
+
+    let signal = 'Neutral';
+    let color  = '#94a3b8';
+    if (chg !== null) {
+      if (chg >= 5)       { signal = 'Bullish'; color = '#00d395'; }
+      else if (chg <= -5) { signal = 'Bearish'; color = '#ff4560'; }
+    }
+
+    const metric = tvl != null ? 'TVL (DefiLlama)' : '7d Price Change';
+    const value  = tvl != null
+      ? '$' + fmtCompact(tvl)
+      : chg !== null ? fmtPct(chg) : '—';
+
+    return { protocol: token.name, metric, value, signal, color, live: !!(c || llama) };
+  });
   const tvSym = CG_TO_TV[selected.id] || `BINANCE:${selected.sym}USDT`;
 
   return (
@@ -207,9 +242,13 @@ export default function DeFAIView({ theme, onToast }) {
         <aside className="right-panel">
           {/* Protocol Scanner */}
           <div className="panel-section">
-            <div className="panel-hdr"><span>Protocol Scanner</span></div>
+            <div className="panel-hdr">
+              <span>Protocol Scanner</span>
+              {liveScanner.some(s => s.live) &&
+                <span style={{ fontSize:9, color:'var(--green)', marginLeft:6 }}>● LIVE</span>}
+            </div>
             <div style={{ padding: '6px 10px', display: 'flex', flexDirection: 'column', gap: 5 }}>
-              {SCANNER_DATA.map(s => (
+              {liveScanner.map(s => (
                 <div key={s.protocol} style={{ display: 'flex', flexDirection: 'column', gap: 2, padding: '7px 0', borderBottom: '1px solid var(--border)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span style={{ fontSize: 10, color: 'var(--txt2)', fontWeight: 500 }}>{s.protocol}</span>
