@@ -1,50 +1,67 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import TVChart from './TVChart.jsx';
-import { fetchNews } from '../lib/api.js';
+import { fetchNews, fetchStockQuotes } from '../lib/api.js';
 import { fmt, fmtCompact, fmtPct, pctClass, timeAgo } from '../lib/utils.js';
 import { STOCKS, STOCK_PRICES, STOCK_CHANGES, SECTORS, ECON_EVENTS } from '../lib/constants.js';
 
-function IndicesBar() {
-  const indices = [
-    { name:'S&P 500',     val:'5,820', chg:+0.34 },
-    { name:'NASDAQ 100',  val:'20,340',chg:+0.52 },
-    { name:'Dow Jones',   val:'43,280',chg:+0.18 },
-    { name:'VIX',         val:'16.82', chg:-0.40 },
-    { name:'Gold',        val:'2,485', chg:+0.22 },
-    { name:'Crude Oil',   val:'78.45', chg:-0.15 },
-    { name:'USD Index',   val:'104.2', chg:+0.08 },
-    { name:'10Y Yield',   val:'4.42%', chg:+0.02 },
-  ];
-  const now = new Date();
+/* ── symbols to request from Yahoo Finance ──────────────────────── */
+const STOCK_SYMS  = STOCKS.map(s => s.sym);
+const INDEX_SYMS  = ['^GSPC', '^NDX', '^DJI', '^VIX', 'GC=F', 'CL=F', 'DX-Y.NYB', '^TNX'];
+const ALL_SYMS    = [...STOCK_SYMS, ...INDEX_SYMS];
+
+const IDX_META = [
+  { sym:'^GSPC',   name:'S&P 500',    fmt: v => v.toLocaleString('en-US', { maximumFractionDigits:0 }) },
+  { sym:'^NDX',    name:'NASDAQ 100', fmt: v => v.toLocaleString('en-US', { maximumFractionDigits:0 }) },
+  { sym:'^DJI',    name:'Dow Jones',  fmt: v => v.toLocaleString('en-US', { maximumFractionDigits:0 }) },
+  { sym:'^VIX',    name:'VIX',        fmt: v => v.toFixed(2) },
+  { sym:'GC=F',    name:'Gold',       fmt: v => v.toLocaleString('en-US', { maximumFractionDigits:0 }) },
+  { sym:'CL=F',    name:'Crude Oil',  fmt: v => v.toFixed(2) },
+  { sym:'DX-Y.NYB',name:'USD Index',  fmt: v => v.toFixed(2) },
+  { sym:'^TNX',    name:'10Y Yield',  fmt: v => v.toFixed(2) + '%' },
+];
+
+/* ── sub-components ─────────────────────────────────────────────── */
+
+function IndicesBar({ idxQuotes }) {
+  const now  = new Date();
   const utcH = now.getUTCHours();
   const open = utcH >= 14 && utcH < 21;
+
   return (
     <div className="indices-bar">
-      {indices.map(idx => (
-        <div key={idx.name} className="idx-chip">
-          <span className="idx-name">{idx.name}</span>
-          <span className="idx-val">{idx.val}</span>
-          <span className={`idx-chg ${pctClass(idx.chg)}`}>{fmtPct(idx.chg)}</span>
-        </div>
-      ))}
-      <div className="ms-wrap" style={{ marginLeft: 'auto' }}>
+      {IDX_META.map(m => {
+        const q   = idxQuotes[m.sym];
+        const val = q ? m.fmt(q.regularMarketPrice) : '—';
+        const chg = q ? q.regularMarketChangePercent : 0;
+        return (
+          <div key={m.sym} className="idx-chip">
+            <span className="idx-name">{m.name}</span>
+            <span className="idx-val">{val}</span>
+            {q
+              ? <span className={`idx-chg ${pctClass(chg)}`}>{fmtPct(chg)}</span>
+              : <span className="idx-chg" style={{ color:'var(--txt3)' }}>—</span>
+            }
+          </div>
+        );
+      })}
+      <div className="ms-wrap" style={{ marginLeft:'auto' }}>
         <span className={`ms-dot ${open ? 'open' : 'closed'}`} />
-        <span style={{ fontSize: 11, color: 'var(--txt2)' }}>{open ? 'NYSE/NASDAQ Open' : 'Market Closed'}</span>
+        <span style={{ fontSize:11, color:'var(--txt2)' }}>{open ? 'NYSE/NASDAQ Open' : 'Market Closed'}</span>
       </div>
     </div>
   );
 }
 
-function StockWatchlist({ stocks, selected, onSelect }) {
+function StockWatchlist({ stocks, selected, onSelect, prices, changes }) {
   return (
     <div className="watchlist-list">
       {stocks.map(s => {
-        const p   = STOCK_PRICES[s.sym] || 0;
-        const chg = STOCK_CHANGES[s.sym] || 0;
+        const p   = prices[s.sym]  ?? STOCK_PRICES[s.sym]  ?? 0;
+        const chg = changes[s.sym] ?? STOCK_CHANGES[s.sym] ?? 0;
         return (
           <div key={s.sym} className={`wl-item${s === selected ? ' active' : ''}`} onClick={() => onSelect(s)}>
             <div className="wl-left">
-              <span className="stock-badge" style={{ width: 30, height: 24, fontSize: 9, borderRadius: 4 }}>{s.sym.slice(0, 4)}</span>
+              <span className="stock-badge" style={{ width:30, height:24, fontSize:9, borderRadius:4 }}>{s.sym.slice(0,4)}</span>
               <div>
                 <div className="wl-sym">{s.sym}</div>
                 <div className="wl-name">{s.sector}</div>
@@ -61,12 +78,14 @@ function StockWatchlist({ stocks, selected, onSelect }) {
   );
 }
 
-function StockMovers({ stocks, onSelect }) {
+function StockMovers({ stocks, onSelect, prices, changes }) {
   const [tab, setTab] = useState('gainers');
-  const gainers = [...stocks].sort((a, b) => (STOCK_CHANGES[b.sym] || 0) - (STOCK_CHANGES[a.sym] || 0)).slice(0, 6);
-  const losers  = [...stocks].sort((a, b) => (STOCK_CHANGES[a.sym] || 0) - (STOCK_CHANGES[b.sym] || 0)).slice(0, 6);
-  const byVol   = stocks.slice(0, 6);
-  const list = tab === 'gainers' ? gainers : tab === 'losers' ? losers : byVol;
+  const sorted = [...stocks].sort((a, b) => {
+    const ca = changes[a.sym] ?? STOCK_CHANGES[a.sym] ?? 0;
+    const cb = changes[b.sym] ?? STOCK_CHANGES[b.sym] ?? 0;
+    return tab === 'gainers' ? cb - ca : tab === 'losers' ? ca - cb : 0;
+  });
+  const list = sorted.slice(0, 6);
   return (
     <div className="panel-section">
       <div className="stab-bar">
@@ -78,14 +97,15 @@ function StockMovers({ stocks, onSelect }) {
       </div>
       <div className="mover-list">
         {list.map(s => {
-          const chg = STOCK_CHANGES[s.sym] || 0;
+          const chg = changes[s.sym] ?? STOCK_CHANGES[s.sym] ?? 0;
+          const p   = prices[s.sym]  ?? STOCK_PRICES[s.sym]  ?? 0;
           return (
             <div key={s.sym} className="mover-item" onClick={() => onSelect(s)}>
               <div className="mv-left">
-                <span className="stock-badge" style={{ width: 28, height: 24, fontSize: 8, borderRadius: 4 }}>{s.sym.slice(0, 4)}</span>
+                <span className="stock-badge" style={{ width:28, height:24, fontSize:8, borderRadius:4 }}>{s.sym.slice(0,4)}</span>
                 <div>
                   <div className="mv-sym">{s.sym}</div>
-                  <div className="mv-price">${fmt(STOCK_PRICES[s.sym] || 0, 2)}</div>
+                  <div className="mv-price">${fmt(p, 2)}</div>
                 </div>
               </div>
               <div className={`mv-chg ${pctClass(chg)}`}>{fmtPct(chg)}</div>
@@ -97,24 +117,26 @@ function StockMovers({ stocks, onSelect }) {
   );
 }
 
-function StockHeader({ stock }) {
-  const price = STOCK_PRICES[stock.sym] || 0;
-  const chg   = STOCK_CHANGES[stock.sym] || 0;
+function StockHeader({ stock, prices, changes }) {
+  const price  = prices[stock.sym]  ?? STOCK_PRICES[stock.sym]  ?? 0;
+  const chg    = changes[stock.sym] ?? STOCK_CHANGES[stock.sym] ?? 0;
   const chgAbs = price * (chg / 100);
-  const rsi = 45 + Math.random() * 20;
+  const rsi    = 45 + Math.random() * 20;
   const rsiSig = rsi > 65 ? 'Overbought' : rsi < 35 ? 'Oversold' : 'Neutral';
   return (
     <>
       <div className="coin-hdr">
         <div className="coin-id">
-          <span className="stock-badge" style={{ fontSize: 14, padding: '6px 10px' }}>{stock.sym}</span>
+          <span className="stock-badge" style={{ fontSize:14, padding:'6px 10px' }}>{stock.sym}</span>
           <div>
             <div className="coin-name-txt">{stock.name}</div>
             <div className="coin-pair">{stock.tv.split(':')[0]} · {stock.sector}</div>
           </div>
           <div className="price-block">
             <div className="big-price">${fmt(price, 2)}</div>
-            <div className={`price-chg ${pctClass(chg)}`}>{chgAbs >= 0 ? '+' : ''}${fmt(Math.abs(chgAbs), 2)} ({fmtPct(chg)})</div>
+            <div className={`price-chg ${pctClass(chg)}`}>
+              {chgAbs >= 0 ? '+' : '-'}${fmt(Math.abs(chgAbs), 2)} ({fmtPct(chg)})
+            </div>
           </div>
         </div>
         <div className="coin-metrics">
@@ -143,7 +165,10 @@ function StockHeader({ stock }) {
         <div className="ta-sep" />
         <div className="ta-item"><span className="ta-label">Short Int.</span><span className="ta-val">{stock.short}</span></div>
         <div className="ta-sep" />
-        <div className="ta-item"><span className="ta-label">24h Chg</span><span className={`ta-val ${pctClass(chg)}`}>{fmtPct(chg)}</span></div>
+        <div className="ta-item">
+          <span className="ta-label">24h Chg</span>
+          <span className={`ta-val ${pctClass(chg)}`}>{fmtPct(chg)}</span>
+        </div>
       </div>
     </>
   );
@@ -159,7 +184,7 @@ function SectorPerf() {
           <div key={s.name} className="sector-row">
             <span className="sector-name">{s.name}</span>
             <div className="sector-bar-wrap">
-              <div className={`sector-bar ${s.chg >= 0 ? 'pos' : 'neg'}`} style={{ width: (Math.abs(s.chg) / max * 100) + '%' }} />
+              <div className={`sector-bar ${s.chg >= 0 ? 'pos' : 'neg'}`} style={{ width:(Math.abs(s.chg)/max*100)+'%' }} />
             </div>
             <span className={`sector-pct ${pctClass(s.chg)}`}>{fmtPct(s.chg)}</span>
           </div>
@@ -188,7 +213,7 @@ function EconCalendar() {
 
 function OptionsFlow() {
   const pcr = (0.7 + Math.random() * 0.6).toFixed(2);
-  const iv  = (15 + Math.random() * 35).toFixed(1);
+  const iv  = (15  + Math.random() * 35).toFixed(1);
   const unusual = Math.random() > 0.5 ? 'Bullish Calls' : 'Unusual Puts';
   return (
     <div className="panel-section">
@@ -202,16 +227,10 @@ function OptionsFlow() {
   );
 }
 
-function TopStocksTable({ stocks, onSelect }) {
-  const STOCK_DATA = stocks.map(s => ({
-    ...s,
-    price: STOCK_PRICES[s.sym] || 0,
-    chgAbs: (STOCK_PRICES[s.sym] || 0) * ((STOCK_CHANGES[s.sym] || 0) / 100),
-    chgPct: STOCK_CHANGES[s.sym] || 0,
-  }));
+function TopStocksTable({ stocks, onSelect, prices, changes }) {
   return (
     <div className="bottom-row">
-      <div className="bottom-card" style={{ flex: 1 }}>
+      <div className="bottom-card" style={{ flex:1 }}>
         <div className="bc-hdr"><h3>Top Stocks & ETFs</h3></div>
         <div className="tbl-wrap">
           <table className="mkt-tbl">
@@ -219,18 +238,23 @@ function TopStocksTable({ stocks, onSelect }) {
               <tr><th>Symbol</th><th>Company</th><th>Price</th><th>Change</th><th>% Change</th><th>Mkt Cap</th><th>P/E</th><th>Sector</th></tr>
             </thead>
             <tbody>
-              {STOCK_DATA.map(r => (
-                <tr key={r.sym} onClick={() => onSelect(r)} style={{ cursor: 'pointer' }}>
-                  <td><b>{r.sym}</b></td>
-                  <td>{r.name}</td>
-                  <td className="mono">${fmt(r.price, 2)}</td>
-                  <td className={pctClass(r.chgAbs)}>{r.chgAbs >= 0 ? '+' : '-'}${fmt(Math.abs(r.chgAbs), 2)}</td>
-                  <td className={pctClass(r.chgPct)}>{fmtPct(r.chgPct)}</td>
-                  <td className="mono">{r.mcap}</td>
-                  <td className="mono">{r.pe || '—'}</td>
-                  <td style={{ color: 'var(--txt3)' }}>{r.sector}</td>
-                </tr>
-              ))}
+              {stocks.map(s => {
+                const price  = prices[s.sym]  ?? STOCK_PRICES[s.sym]  ?? 0;
+                const chgPct = changes[s.sym] ?? STOCK_CHANGES[s.sym] ?? 0;
+                const chgAbs = price * (chgPct / 100);
+                return (
+                  <tr key={s.sym} onClick={() => onSelect(s)} style={{ cursor:'pointer' }}>
+                    <td><b>{s.sym}</b></td>
+                    <td>{s.name}</td>
+                    <td className="mono">${fmt(price, 2)}</td>
+                    <td className={pctClass(chgAbs)}>{chgAbs >= 0 ? '+' : '-'}${fmt(Math.abs(chgAbs), 2)}</td>
+                    <td className={pctClass(chgPct)}>{fmtPct(chgPct)}</td>
+                    <td className="mono">{s.mcap}</td>
+                    <td className="mono">{s.pe || '—'}</td>
+                    <td style={{ color:'var(--txt3)' }}>{s.sector}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -254,11 +278,17 @@ function StockNews({ posts, loading, onRefresh }) {
               const url = p.url?.startsWith('http') ? p.url : `https://reddit.com${p.permalink}`;
               return (
                 <a key={i} className="news-card" href={url} target="_blank" rel="noopener">
-                  {preview ? <img className="news-img" src={preview} alt="" loading="lazy" onError={e => e.target.style.display='none'} /> : <div className="news-img-placeholder">📈</div>}
+                  {preview
+                    ? <img className="news-img" src={preview} alt="" loading="lazy" onError={e => e.target.style.display='none'} />
+                    : <div className="news-img-placeholder">📈</div>
+                  }
                   <div className="news-body">
-                    <div className="news-source"><span className="news-src">r/{p.subreddit}</span><span className="news-date">{timeAgo(p.created_utc)}</span></div>
+                    <div className="news-source">
+                      <span className="news-src">r/{p.subreddit}</span>
+                      <span className="news-date">{timeAgo(p.created_utc)}</span>
+                    </div>
                     <div className="news-title">{p.title}</div>
-                    <div style={{ fontSize: 10, color: 'var(--txt3)', marginTop: 4 }}>▲ {p.score} · 💬 {p.num_comments}</div>
+                    <div style={{ fontSize:10, color:'var(--txt3)', marginTop:4 }}>▲ {p.score} · 💬 {p.num_comments}</div>
                   </div>
                 </a>
               );
@@ -269,20 +299,58 @@ function StockNews({ posts, loading, onRefresh }) {
   );
 }
 
+/* ── main view ──────────────────────────────────────────────────── */
+
 export default function StocksView({ theme, onToast }) {
-  const [selected, setSelected] = useState(STOCKS[0]);
-  const [tvInterval, setTvInterval] = useState('D');
-  const [news, setNews]     = useState([]);
+  const [selected,    setSelected]    = useState(STOCKS[0]);
+  const [tvInterval,  setTvInterval]  = useState('D');
+  const [news,        setNews]        = useState([]);
   const [newsLoading, setNewsLoading] = useState(false);
+  const [prices,      setPrices]      = useState({});
+  const [changes,     setChanges]     = useState({});
+  const [idxQuotes,   setIdxQuotes]   = useState({});
+  const [liveStatus,  setLiveStatus]  = useState('loading'); // 'loading' | 'live' | 'cached'
+
+  const loadQuotes = useCallback(async () => {
+    try {
+      const quotes = await fetchStockQuotes(ALL_SYMS);
+      const newPrices  = {};
+      const newChanges = {};
+      const newIdx     = {};
+
+      quotes.forEach(q => {
+        const sym = q.symbol;
+        if (STOCK_SYMS.includes(sym)) {
+          newPrices[sym]  = q.regularMarketPrice;
+          newChanges[sym] = q.regularMarketChangePercent;
+        }
+        if (INDEX_SYMS.includes(sym)) {
+          newIdx[sym] = q;
+        }
+      });
+
+      setPrices(newPrices);
+      setChanges(newChanges);
+      setIdxQuotes(newIdx);
+      setLiveStatus('live');
+    } catch (err) {
+      console.warn('Live stock quotes unavailable:', err.message);
+      setLiveStatus('cached');
+      if (onToast) onToast('Using cached stock prices — live feed unavailable', '📊');
+    }
+  }, [onToast]);
+
+  useEffect(() => {
+    loadQuotes();
+    const id = setInterval(loadQuotes, 60000);
+    return () => clearInterval(id);
+  }, [loadQuotes]);
 
   useEffect(() => { loadNews(); }, []);
 
   async function loadNews() {
     setNewsLoading(true);
-    try {
-      const posts = await fetchNews('Trading');
-      setNews(posts);
-    } catch { setNews([]); }
+    try { setNews(await fetchNews('Trading')); } catch { setNews([]); }
     setNewsLoading(false);
   }
 
@@ -290,18 +358,33 @@ export default function StocksView({ theme, onToast }) {
 
   return (
     <>
-      <IndicesBar />
+      <IndicesBar idxQuotes={idxQuotes} />
+
+      {/* live indicator */}
+      <div style={{ padding:'4px 16px', display:'flex', alignItems:'center', gap:6, borderBottom:'1px solid var(--border)', background:'var(--bg2)' }}>
+        <span style={{
+          width:7, height:7, borderRadius:'50%',
+          background: liveStatus === 'live' ? 'var(--green)' : liveStatus === 'loading' ? 'var(--yellow)' : 'var(--red)',
+          display:'inline-block',
+        }} />
+        <span style={{ fontSize:11, color:'var(--txt3)' }}>
+          {liveStatus === 'live'    && 'Live prices via Yahoo Finance · refreshes every 60s'}
+          {liveStatus === 'loading' && 'Loading live prices…'}
+          {liveStatus === 'cached'  && 'Cached prices (live feed unavailable)'}
+        </span>
+      </div>
+
       <div className="dash-grid">
         <aside className="left-panel">
           <div className="panel-section">
             <div className="panel-hdr"><span>Stock Watchlist</span></div>
-            <StockWatchlist stocks={STOCKS} selected={selected} onSelect={setSelected} />
+            <StockWatchlist stocks={STOCKS} selected={selected} onSelect={setSelected} prices={prices} changes={changes} />
           </div>
-          <StockMovers stocks={STOCKS} onSelect={setSelected} />
+          <StockMovers stocks={STOCKS} onSelect={setSelected} prices={prices} changes={changes} />
         </aside>
 
         <main className="center-panel">
-          <StockHeader stock={selected} />
+          <StockHeader stock={selected} prices={prices} changes={changes} />
           <div className="chart-ctrl-bar">
             <div className="tf-group">
               {Object.entries(TF_LABELS).map(([tf, label]) => (
@@ -327,7 +410,7 @@ export default function StocksView({ theme, onToast }) {
         </aside>
       </div>
 
-      <TopStocksTable stocks={STOCKS} onSelect={setSelected} />
+      <TopStocksTable stocks={STOCKS} onSelect={setSelected} prices={prices} changes={changes} />
       <StockNews posts={news} loading={newsLoading} onRefresh={loadNews} />
     </>
   );

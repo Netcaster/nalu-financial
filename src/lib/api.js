@@ -80,3 +80,15 @@ export async function searchCoinGecko(query) {
   const d = await apiFetch(`${CFG.COINGECKO}/search?query=${encodeURIComponent(query)}`);
   return d.coins?.slice(0, 6) || [];
 }
+
+export async function fetchStockQuotes(symbols) {
+  const syms = symbols.map(s => s.replace('.', '-')).join(','); // BRK.B → BRK-B
+  const r = await fetch(`/api/stocks?symbols=${encodeURIComponent(syms)}`);
+  if (!r.ok) throw new Error(`Stock proxy HTTP ${r.status}`);
+  const data = await r.json();
+  if (data.error) throw new Error(data.error);
+  return (data.quoteResponse?.result || []).map(q => ({
+    ...q,
+    symbol: q.symbol.replace('-', '.'), // BRK-B → BRK.B
+  }));
+}
